@@ -18,6 +18,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# =====================================================
+# API КЛЮЧ БЕРЕТСЯ ИЗ ПЕРЕМЕННОЙ ОКРУЖЕНИЯ НА RENDER
+# =====================================================
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
+if not GROQ_API_KEY:
+    print("⚠️ ВНИМАНИЕ: GROQ_API_KEY не задан в переменных окружения!")
+
 # Фейковая база данных в памяти
 users_db = {
     "admin": {
@@ -55,14 +62,21 @@ def root():
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "users": len(users_db), "checks": len(checks_db)}
+    return {"status": "ok", "database": "in-memory", "users": len(users_db), "checks": len(checks_db)}
+
+# =====================================================
+# ЭНДПОИНТ ДЛЯ ПОЛУЧЕНИЯ API КЛЮЧА (для мобильного приложения)
+# =====================================================
+@app.get("/get_groq_key")
+def get_groq_key():
+    if not GROQ_API_KEY:
+        raise HTTPException(status_code=500, detail="API ключ не настроен на сервере")
+    return {"key": GROQ_API_KEY}
 
 @app.post("/login")
 def login(req: AuthRequest):
-    print(f"Login attempt: {req.username}")
     user = users_db.get(req.username)
     if user and user["password_hash"] == hash_password(req.password):
-        print(f"Login success: {req.username}")
         return {
             "status": "ok",
             "user": {
@@ -71,14 +85,11 @@ def login(req: AuthRequest):
                 "role": user["role"]
             }
         }
-    print(f"Login failed: {req.username}")
     raise HTTPException(status_code=401, detail="Неверный логин или пароль")
 
 @app.post("/register")
 def register(req: AuthRequest):
     global next_user_id
-    print(f"Register attempt: {req.username}")
-    
     if req.username in users_db:
         raise HTTPException(status_code=400, detail="Пользователь уже существует")
     
@@ -89,7 +100,6 @@ def register(req: AuthRequest):
         "role": "user"
     }
     next_user_id += 1
-    print(f"User registered: {req.username}")
     return {"status": "ok"}
 
 @app.post("/save_check")
@@ -106,7 +116,6 @@ def save_check(data: CheckSaveRequest):
     }
     checks_db.append(check)
     next_check_id += 1
-    print(f"Saved check: {data.archive_name} for {data.username}")
     return {"status": "saved", "check_id": check["id"]}
 
 @app.get("/history/{username}")
