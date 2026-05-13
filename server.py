@@ -8,12 +8,15 @@ import hashlib
 from datetime import datetime
 
 app = FastAPI(title="AI Examiner Server")
+
+# ПРАВИЛЬНЫЕ НАСТРОЙКИ CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # Разрешаем все источники
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["*"],  # Разрешаем все методы (GET, POST, DELETE и т.д.)
+    allow_headers=["*"],  # Разрешаем все заголовки
+    expose_headers=["*"],
 )
 
 # Временное хранилище в памяти
@@ -54,6 +57,11 @@ def root():
 @app.get("/health")
 def health():
     return {"status": "ok", "database": "in-memory", "users": len(users_db), "checks": len(checks_db)}
+
+@app.options("/{rest_of_path:path}")
+async def preflight_handler(rest_of_path: str):
+    """Обработка preflight запросов CORS"""
+    return {"status": "ok"}
 
 @app.post("/login")
 def login(req: AuthRequest):
@@ -98,11 +106,16 @@ def save_check(data: CheckSaveRequest):
     }
     checks_db.append(check)
     next_check_id += 1
+    print(f"Saved check: {data.archive_name} for user {data.username}")
     return {"status": "saved", "check_id": check["id"]}
 
 @app.get("/history/{username}")
 def get_history(username: str):
     user_checks = [c for c in checks_db if c["username"] == username]
+    # Также показываем админу все проверки
+    if username == "admin":
+        user_checks = checks_db
+    
     result = []
     for check in user_checks:
         result.append({
