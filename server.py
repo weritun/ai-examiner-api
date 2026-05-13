@@ -9,17 +9,16 @@ from datetime import datetime
 
 app = FastAPI(title="AI Examiner Server")
 
-# ПРАВИЛЬНЫЕ НАСТРОЙКИ CORS
+# CORS настройки
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Разрешаем все источники
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],  # Разрешаем все методы (GET, POST, DELETE и т.д.)
-    allow_headers=["*"],  # Разрешаем все заголовки
-    expose_headers=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-# Временное хранилище в памяти
+# Фейковая база данных в памяти
 users_db = {
     "admin": {
         "id": 1,
@@ -56,17 +55,14 @@ def root():
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "database": "in-memory", "users": len(users_db), "checks": len(checks_db)}
-
-@app.options("/{rest_of_path:path}")
-async def preflight_handler(rest_of_path: str):
-    """Обработка preflight запросов CORS"""
-    return {"status": "ok"}
+    return {"status": "ok", "users": len(users_db), "checks": len(checks_db)}
 
 @app.post("/login")
 def login(req: AuthRequest):
+    print(f"Login attempt: {req.username}")
     user = users_db.get(req.username)
     if user and user["password_hash"] == hash_password(req.password):
+        print(f"Login success: {req.username}")
         return {
             "status": "ok",
             "user": {
@@ -75,11 +71,14 @@ def login(req: AuthRequest):
                 "role": user["role"]
             }
         }
+    print(f"Login failed: {req.username}")
     raise HTTPException(status_code=401, detail="Неверный логин или пароль")
 
 @app.post("/register")
 def register(req: AuthRequest):
     global next_user_id
+    print(f"Register attempt: {req.username}")
+    
     if req.username in users_db:
         raise HTTPException(status_code=400, detail="Пользователь уже существует")
     
@@ -90,6 +89,7 @@ def register(req: AuthRequest):
         "role": "user"
     }
     next_user_id += 1
+    print(f"User registered: {req.username}")
     return {"status": "ok"}
 
 @app.post("/save_check")
@@ -106,13 +106,12 @@ def save_check(data: CheckSaveRequest):
     }
     checks_db.append(check)
     next_check_id += 1
-    print(f"Saved check: {data.archive_name} for user {data.username}")
+    print(f"Saved check: {data.archive_name} for {data.username}")
     return {"status": "saved", "check_id": check["id"]}
 
 @app.get("/history/{username}")
 def get_history(username: str):
     user_checks = [c for c in checks_db if c["username"] == username]
-    # Также показываем админу все проверки
     if username == "admin":
         user_checks = checks_db
     
